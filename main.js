@@ -65,6 +65,7 @@ var game;
 var platforms;
 var untouchables;
 var player;
+var competitors = {};
 var cursors;
 var sound;
 
@@ -78,7 +79,7 @@ async function launch() {
     }
 }
 
-function preload() {
+async function preload() {
     this.load.image('background', './assets/png/BG.png');
     this.load.image('ground_left', './assets/png/Tiles/Tile (16).png');
     this.load.image('ground_right', './assets/png/Tiles/Tile (14).png');
@@ -86,10 +87,10 @@ function preload() {
     this.load.image('bone_skull', './assets/png/Tiles/Bones (2).png');
     this.load.image('tomb_stone', './assets/png/Objects/TombStone (2).png');
     this.load.image('player', './assets/png/Character/spartan_1.png');
-    this.load.audio('background_music', './assets/sound/drone-9708.mp3')
+    //this.load.audio('background_music', './assets/sound/drone-9708.mp3')
 }
 
-function create() {
+async function create() {
     this.add.image(400, 300, 'background').setScale(0.55);
     // Add a physics flatform group
     platforms = this.physics.add.staticGroup();
@@ -119,13 +120,33 @@ function create() {
 
     cursors = this.input.keyboard.createCursorKeys();
 
-    sound = this.sound.add('background_music');
-    sound.play();
+    //sound = this.sound.add('background_music');
+    //sound.play();
 
+    let user = Moralis.User.current();
+    let query = new Moralis.Query("PlayerPosition");
+    let subcription = await query.subscribe();
+    subcription.on('create', (plocation) => {
+        if (plocation.get("player") != user.get("ethAddress")) {
+            if (competitors[plocation.get("player")] == undefined) {
+                //it first time seeing
+                competitors[plocation.get("player")] = this.add.image(plocation.get("x"), plocation.get("y"), "player").setScale(0.25);
+            } else {
+                competitors[plocation.get("player")].x = plocation.get("x");
+                competitors[plocation.get("player")].y = plocation.get("y");
+            }
+
+
+            console.log("someone moved!");
+            console.log(plocation.get("player"));
+            console.log("new X : " + plocation.get("x"));
+            console.log("new Y : " + plocation.get("y"));
+        }
+    });
 
 }
 
-function update() {
+async function update() {
     if (cursors.left.isDown) {
         player.setVelocityX(-160);
 
@@ -142,5 +163,21 @@ function update() {
 
     if (cursors.up.isDown && player.body.touching.down) {
         player.setVelocityY(-200);
+    }
+
+    if (player.lastX != player.x || player.lastY != player.y) {
+        let user = Moralis.User.current();
+
+        const PlayerPosition = Moralis.Object.extend("PlayerPosition");
+        const playerPosition = new PlayerPosition();
+
+        playerPosition.set("player", user.get("ethAddress"));
+        playerPosition.set("x", player.x);
+        playerPosition.set("y", player.y);
+
+        player.lastX = player.x;
+        player.lastY = player.y;
+
+        await playerPosition.save();
     }
 }
